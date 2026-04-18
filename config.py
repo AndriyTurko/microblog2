@@ -8,9 +8,9 @@ load_dotenv(os.path.join(basedir, '.env'))
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'you-will-never-guess'
     # SQLALCHEMY_DATABASE_URI ='mysql://root:@127.0.0.1:3306/microblog'
-    # SQLALCHEMY_DATABASE_URI = 'mysql://root:NewStrongPassword123!@13.61.154.2:3306/microblog'
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-        'sqlite:///' + os.path.join(basedir, 'app.db')
+    SQLALCHEMY_DATABASE_URI = 'mysql://admin:Adm1nAdm1n@localhost:3306/microblog2'
+    # SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
+    #     'sqlite:///' + os.path.join(basedir, 'app.db')
     MAIL_SERVER = os.environ.get('MAIL_SERVER')
     MAIL_PORT = int(os.environ.get('MAIL_PORT') or 25)
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS') is not None
