@@ -25,20 +25,36 @@ class UserModelCase(unittest.TestCase):
         self.app_context.pop()
 
     def test_password_hashing(self):
-        u = User(username='susan', email='susan@example.com')
+        u = User(username='susan', email='susan@example.com', phone_number='+380501234570')
         u.set_password('cat')
         self.assertFalse(u.check_password('dog'))
         self.assertTrue(u.check_password('cat'))
 
     def test_avatar(self):
-        u = User(username='john', email='john@example.com')
+        u = User(username='john', email='john@example.com', phone_number='+380501234570')
         self.assertEqual(u.avatar(128), ('https://www.gravatar.com/avatar/'
                                          'd4c74594d841139328695756648b6bd6'
                                          '?d=identicon&s=128'))
 
+        def test_phone_number_validation(self):
+            user = User(username='john', email='john@example.com', phone_number='+380501234567')
+            self.assertEqual(user.phone_number, '+380501234567')
+
+            user.phone_number = '+380671234567'
+            self.assertEqual(user.phone_number, '+380671234567')
+
+            with self.assertRaises(ValueError):
+                user.phone_number = '12345'
+
+            with self.assertRaises(ValueError):
+                user.phone_number = '05012abc67'
+
+            with self.assertRaises(ValueError):
+                user.phone_number = '+1234567890'
+
     def test_follow(self):
-        u1 = User(username='john', email='john@example.com')
-        u2 = User(username='susan', email='susan@example.com')
+        u1 = User(username='john', email='john@example.com', phone_number='+380501234570')
+        u2 = User(username='susan', email='susan@example.com', phone_number='+380501234570')
         db.session.add(u1)
         db.session.add(u2)
         db.session.commit()
@@ -65,10 +81,10 @@ class UserModelCase(unittest.TestCase):
 
     def test_follow_posts(self):
         # create four users
-        u1 = User(username='john', email='john@example.com')
-        u2 = User(username='susan', email='susan@example.com')
-        u3 = User(username='mary', email='mary@example.com')
-        u4 = User(username='david', email='david@example.com')
+        u1 = User(username='john', email='john@example.com', phone_number='+380501234570')
+        u2 = User(username='susan', email='susan@example.com', phone_number='+380501234570')
+        u3 = User(username='mary', email='mary@example.com', phone_number='+380501234570')
+        u4 = User(username='david', email='david@example.com', phone_number='+380501234570')
         db.session.add_all([u1, u2, u3, u4])
 
         # create four posts
