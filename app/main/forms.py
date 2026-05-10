@@ -6,6 +6,7 @@ import sqlalchemy as sa
 from flask_babel import _, lazy_gettext as _l
 from app import db
 from app.models import User
+from utils import PHONE_VALIDATION_REGEX
 
 
 class EditProfileForm(FlaskForm):
@@ -15,7 +16,7 @@ class EditProfileForm(FlaskForm):
         validators=[
             DataRequired(),
             Regexp(
-                r'^\+380\d{9}$',
+                PHONE_VALIDATION_REGEX,
                 message=_("Phone number must start with +380, contain only digits after +, and be 13 characters long")
             )
         ]

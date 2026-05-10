@@ -12,6 +12,7 @@ from app import db, login
 from app.search import add_to_index, remove_from_index, query_index
 import re
 from sqlalchemy.orm import validates
+from utils import PHONE_VALIDATION_REGEX
 
 
 class SearchableMixin:
@@ -101,7 +102,7 @@ class User(UserMixin, db.Model):
 
     @validates('phone_number')
     def validate_phone_number(self, key, phone_number):
-        pattern = re.compile(r'^\+380\d{9}$')
+        pattern = re.compile(PHONE_VALIDATION_REGEX)
         if not pattern.match(phone_number):
             raise ValueError(
                 "Phone number must start with +380, contain only digits after +, and be 13 characters long")

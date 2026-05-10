@@ -5,7 +5,7 @@ from wtforms.validators import ValidationError, DataRequired, Email, EqualTo, Le
 import sqlalchemy as sa
 from app import db
 from app.models import User
-
+from utils import PHONE_VALIDATION_REGEX
 
 
 class LoginForm(FlaskForm):
@@ -23,7 +23,7 @@ class RegistrationForm(FlaskForm):
         validators=[
             DataRequired(),
             Regexp(
-                r'^\+380\d{9}$',
+                PHONE_VALIDATION_REGEX,
                 message=_("Phone number must start with +380, contain only digits after +, and be 13 characters long")
             )
         ]
