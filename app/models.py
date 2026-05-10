@@ -10,6 +10,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 from app import db, login
 from app.search import add_to_index, remove_from_index, query_index
+import re
+from sqlalchemy.orm import validates
+from utils import PHONE_VALIDATION_REGEX
 
 
 class SearchableMixin:
@@ -68,17 +71,13 @@ followers = sa.Table(
 
 class User(UserMixin, db.Model):
     id: so.Mapped[int] = so.mapped_column(primary_key=True)
-    username: so.Mapped[str] = so.mapped_column(sa.String(64), index=True,
-                                                unique=True)
-    email: so.Mapped[str] = so.mapped_column(sa.String(120), index=True,
-                                             unique=True)
+    username: so.Mapped[str] = so.mapped_column(sa.String(64), index=True, unique=True)
+    email: so.Mapped[str] = so.mapped_column(sa.String(120), index=True, unique=True)
+    phone_number: so.Mapped[str] = so.mapped_column(sa.String(16), index=True)
     password_hash: so.Mapped[Optional[str]] = so.mapped_column(sa.String(256))
     about_me: so.Mapped[Optional[str]] = so.mapped_column(sa.String(140))
-    last_seen: so.Mapped[Optional[datetime]] = so.mapped_column(
-        default=lambda: datetime.now(timezone.utc))
-
-    posts: so.WriteOnlyMapped['Post'] = so.relationship(
-        back_populates='author')
+    last_seen: so.Mapped[Optional[datetime]] = so.mapped_column(default=lambda: datetime.now(timezone.utc))
+    posts: so.WriteOnlyMapped['Post'] = so.relationship(back_populates='author')
     following: so.WriteOnlyMapped['User'] = so.relationship(
         secondary=followers, primaryjoin=(followers.c.follower_id == id),
         secondaryjoin=(followers.c.followed_id == id),
@@ -100,6 +99,14 @@ class User(UserMixin, db.Model):
     def avatar(self, size):
         digest = md5(self.email.lower().encode('utf-8')).hexdigest()
         return f'https://www.gravatar.com/avatar/{digest}?d=identicon&s={size}'
+
+    @validates('phone_number')
+    def validate_phone_number(self, key, phone_number):
+        pattern = re.compile(PHONE_VALIDATION_REGEX)
+        if not pattern.match(phone_number):
+            raise ValueError(
+                "Phone number must start with +380, contain only digits after +, and be 13 characters long")
+        return phone_number
 
     def follow(self, user):
         if not self.is_following(user):

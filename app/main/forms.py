@@ -1,17 +1,27 @@
 from flask import request
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, TextAreaField
-from wtforms.validators import ValidationError, DataRequired, Length
+from wtforms.validators import ValidationError, DataRequired, Length, Regexp
 import sqlalchemy as sa
 from flask_babel import _, lazy_gettext as _l
 from app import db
 from app.models import User
+from utils import PHONE_VALIDATION_REGEX
 
 
 class EditProfileForm(FlaskForm):
     username = StringField(_l('Username'), validators=[DataRequired()])
-    about_me = TextAreaField(_l('About me'),
-                             validators=[Length(min=0, max=140)])
+    phone_number = StringField(
+        _l('Phone number'),
+        validators=[
+            DataRequired(),
+            Regexp(
+                PHONE_VALIDATION_REGEX,
+                message=_("Phone number must start with +380, contain only digits after +, and be 13 characters long")
+            )
+        ]
+    )
+    about_me = TextAreaField(_l('About me'), validators=[Length(min=0, max=140)])
     submit = SubmitField(_l('Submit'))
 
     def __init__(self, original_username, *args, **kwargs):
