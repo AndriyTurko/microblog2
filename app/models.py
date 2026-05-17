@@ -1,18 +1,19 @@
-from datetime import datetime, timezone
-from hashlib import md5
-from time import time
-from typing import Optional
+import re
+import jwt
 import sqlalchemy as sa
 import sqlalchemy.orm as so
+from time import time
+from hashlib import md5
+from app import db, login
+from typing import Optional
 from flask import current_app
 from flask_login import UserMixin
-from werkzeug.security import generate_password_hash, check_password_hash
-import jwt
-from app import db, login
-from app.search import add_to_index, remove_from_index, query_index
-import re
 from sqlalchemy.orm import validates
+from datetime import datetime, timezone
 from utils import PHONE_VALIDATION_REGEX
+from app.search import add_to_index, remove_from_index, query_index
+from werkzeug.security import generate_password_hash, check_password_hash
+
 
 
 class SearchableMixin:
@@ -86,6 +87,9 @@ class User(UserMixin, db.Model):
         secondary=followers, primaryjoin=(followers.c.followed_id == id),
         secondaryjoin=(followers.c.follower_id == id),
         back_populates='following')
+    reactions: so.WriteOnlyMapped['PostReaction'] = so.relationship(
+        back_populates='user'
+    )
 
     def __repr__(self):
         return '<User {}>'.format(self.username)
@@ -174,8 +178,55 @@ class Post(SearchableMixin, db.Model):
     user_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id),
                                                index=True)
     language: so.Mapped[Optional[str]] = so.mapped_column(sa.String(5))
-
     author: so.Mapped[User] = so.relationship(back_populates='posts')
+    reactions: so.WriteOnlyMapped['PostReaction'] = so.relationship(
+        back_populates='post'
+    )
 
     def __repr__(self):
         return '<Post {}>'.format(self.body)
+
+    def likes_count(self):
+        query = sa.select(sa.func.count()).where(
+            PostReaction.post_id == self.id,
+            PostReaction.reaction_type == 'like'
+        )
+        return db.session.scalar(query)
+
+    def dislikes_count(self):
+        query = sa.select(sa.func.count()).where(
+            PostReaction.post_id == self.id,
+            PostReaction.reaction_type == 'dislike'
+        )
+        return db.session.scalar(query)
+
+
+class PostReaction(db.Model):
+    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+    reaction_type: so.Mapped[str] = so.mapped_column(sa.String(10))
+    timestamp: so.Mapped[datetime] = so.mapped_column(default=lambda: datetime.now(timezone.utc))
+    user_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id))
+    post_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(Post.id))
+    __table_args__ = (
+        sa.UniqueConstraint(
+            'user_id',
+            'post_id',
+            name='unique_user_post_reaction'
+        ),
+    )
+    user: so.Mapped[User] = so.relationship(back_populates='reactions')
+    post: so.Mapped[Post] = so.relationship(back_populates='reactions')
+
+
+class Comment(db.Model):
+    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+    body: so.Mapped[str] = so.mapped_column(sa.Text, nullable=False)
+    timestamp: so.Mapped[datetime] = so.mapped_column(index=True, default=lambda: datetime.now(timezone.utc))
+    user_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id), index=True)
+    post_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(Post.id), index=True)
+    user: so.Mapped[User] = so.relationship(backref='comments')
+    post: so.Mapped[Post] = so.relationship(backref='comments')
+
+    def __repr__(self):
+        return f'<Comment {self.body[:20]}>'
+
