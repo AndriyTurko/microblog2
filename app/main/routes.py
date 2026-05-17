@@ -5,8 +5,8 @@ from flask_babel import _, get_locale
 import sqlalchemy as sa
 from langdetect import detect, LangDetectException
 from app import db
-from app.main.forms import EditProfileForm, EmptyForm, PostForm, SearchForm
-from app.models import User, Post
+from app.main.forms import EditProfileForm, EmptyForm, PostForm, SearchForm, CommentForm
+from app.models import User, Post, PostReaction, Comment
 from app.translate import translate
 from app.main import bp
 
@@ -48,7 +48,7 @@ def index():
 
 
 @bp.route('/explore')
-@login_required
+# @login_required
 def explore():
     page = request.args.get('page', 1, type=int)
     query = sa.select(Post).order_by(Post.timestamp.desc())
@@ -59,9 +59,16 @@ def explore():
         if posts.has_next else None
     prev_url = url_for('main.explore', page=posts.prev_num) \
         if posts.has_prev else None
-    return render_template('index.html', title=_('Explore'),
-                           posts=posts.items, next_url=next_url,
-                           prev_url=prev_url)
+    form = PostForm()
+    comment_form = CommentForm()
+    return render_template('index.html',
+        title=_('Explore'),
+        posts=posts.items,
+        next_url=next_url,
+        prev_url=prev_url,
+       form=form,
+       comment_form=comment_form,
+    )
 
 
 @bp.route('/user/<username>')
@@ -166,3 +173,83 @@ def search():
         if page > 1 else None
     return render_template('search.html', title=_('Search'), posts=posts,
                            next_url=next_url, prev_url=prev_url)
+
+
+@bp.route('/like/<int:post_id>')
+@login_required
+def like_post(post_id):
+    post = db.get_or_404(Post, post_id)
+    existing_reaction = db.session.scalar(
+        sa.select(PostReaction).where(
+            PostReaction.user_id == current_user.id,
+            PostReaction.post_id == post.id
+        )
+    )
+    if existing_reaction:
+        if existing_reaction.reaction_type != 'like':
+            existing_reaction.reaction_type = 'like'
+            db.session.commit()
+    else:
+        reaction = PostReaction(
+            reaction_type='like',
+            user_id=current_user.id,
+            post_id=post.id
+        )
+        db.session.add(reaction)
+        db.session.commit()
+    return redirect(request.referrer or url_for('main.index'))
+
+
+@bp.route('/dislike/<int:post_id>')
+@login_required
+def dislike_post(post_id):
+    post = db.get_or_404(Post, post_id)
+    existing_reaction = db.session.scalar(
+        sa.select(PostReaction).where(
+            PostReaction.user_id == current_user.id,
+            PostReaction.post_id == post.id
+        )
+    )
+    if existing_reaction:
+        if existing_reaction.reaction_type == 'dislike':
+            return redirect(request.referrer or url_for('main.index'))
+        existing_reaction.reaction_type = 'dislike'
+    else:
+        reaction = PostReaction(
+            reaction_type='dislike',
+            user_id=current_user.id,
+            post_id=post.id
+        )
+        db.session.add(reaction)
+    db.session.commit()
+    return redirect(request.referrer or url_for('main.index'))
+
+
+@bp.route('/post/<int:post_id>', methods=['GET', 'POST'])
+@login_required
+def post(post_id):
+    post = db.get_or_404(Post, post_id)
+    form = CommentForm()
+    if form.validate_on_submit():
+        comment = Comment(
+            body=form.body.data,
+            user_id=current_user.id,
+            post_id=post.id
+        )
+        db.session.add(comment)
+        db.session.commit()
+        flash("Comment added!")
+        return redirect(url_for('main.post', post_id=post.id))
+
+    comments = db.session.scalars(
+        sa.select(Comment)
+        .where(Comment.post_id == post.id)
+        .order_by(Comment.timestamp.asc())
+    ).all()
+    return render_template(
+        'post.html',
+        post=post,
+        form=form,
+        comments=comments
+    )
+
