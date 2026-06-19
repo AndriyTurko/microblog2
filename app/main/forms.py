@@ -37,11 +37,15 @@ class EditProfileForm(FlaskForm):
 
 
 class EmptyForm(FlaskForm):
+    body = TextAreaField(_l('Comment'), validators=[
+        DataRequired(),
+        Length(min=1, max=500)
+    ])
     submit = SubmitField('Submit')
 
 
 class PostForm(FlaskForm):
-    post = TextAreaField(_l('Say something'), validators=[
+    body = TextAreaField(_l('Say something'), validators=[
         DataRequired(), Length(min=1, max=140)])
     submit = SubmitField(_l('Submit'))
 
@@ -55,3 +59,11 @@ class SearchForm(FlaskForm):
         if 'meta' not in kwargs:
             kwargs['meta'] = {'csrf': False}
         super(SearchForm, self).__init__(*args, **kwargs)
+
+
+class CommentForm(FlaskForm):
+    body = TextAreaField(_l('Comment'), validators=[
+        DataRequired(),
+        Length(min=1, max=500)
+    ])
+    submit = SubmitField(_l('Submit'))

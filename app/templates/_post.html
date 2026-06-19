@@ -1,30 +1,132 @@
-    <table class="table table-hover">
-        <tr>
-            <td width="70px">
+<table class="table table-hover">
+    <tr>
+        <td width="70px">
+            <a href="{{ url_for('main.user', username=post.author.username) }}">
+                <img src="{{ post.author.avatar(70) }}" />
+            </a>
+        </td>
+        <td>
+            <!-- Автор -->
+            {% set user_link %}
                 <a href="{{ url_for('main.user', username=post.author.username) }}">
-                    <img src="{{ post.author.avatar(70) }}" />
+                    {{ post.author.username }}
                 </a>
-            </td>
-            <td>
-                {% set user_link %}
-                    <a href="{{ url_for('main.user', username=post.author.username) }}">
-                        {{ post.author.username }}
-                    </a>
-                {% endset %}
-                {{ _('%(username)s said %(when)s',
-                    username=user_link, when=moment(post.timestamp).fromNow()) }}
-                <br>
-                <span id="post{{ post.id }}">{{ post.body }}</span>
-                {% if post.language and post.language != g.locale %}
+            {% endset %}
+            {{ _('%(username)s said %(when)s',
+                username=user_link,
+                when=moment(post.timestamp).fromNow()) }}
+            <br>
+            <!-- Текст поста -->
+            <span id="post{{ post.id }}">
+                {{ post.body }}
+            </span>
+            <!-- Переклад -->
+            {% if post.language and post.language != g.locale %}
                 <br><br>
                 <span id="translation{{ post.id }}">
                     <a href="javascript:translate(
                                 'post{{ post.id }}',
                                 'translation{{ post.id }}',
                                 '{{ post.language }}',
-                                '{{ g.locale }}');">{{ _('Translate') }}</a>
+                                '{{ g.locale }}');">
+                        {{ _('Translate') }}
+                    </a>
                 </span>
-                {% endif %}
-            </td>
-        </tr>
-    </table>
+            {% endif %}
+            <br><br>
+            <!-- LIKES / DISLIKES -->
+            <div>
+                <button type="button"
+                        onclick="reactToPost({{ post.id }}, 'like')"
+                        style="border: none; background: none; cursor: pointer; margin-right: 10px;">
+                    👍 Like
+                </button>
+                <span id="likes-{{ post.id }}" style="margin-right: 20px;">
+                    {{ post.likes_count() }}
+                </span>
+                <button type="button"
+                        onclick="reactToPost({{ post.id }}, 'dislike')"
+                        style="border: none; background: none; cursor: pointer; margin-right: 10px;">
+                    👎 Dislike
+                </button>
+                <span id="dislikes-{{ post.id }}">
+                    {{ post.dislikes_count() }}
+                </span>
+            </div>
+            <br>
+            <!-- 💬 ФОРМА КОМЕНТАРЯ -->
+            <form action="{{ url_for('main.post', post_id=post.id) }}" method="POST">
+                {{ form.hidden_tag() }}
+                {{ form.body(class="form-control", rows="2", placeholder="Write a comment...") }}
+                <br>
+                {{ form.submit(class="btn btn-primary btn-sm") }}
+            </form>
+            <br>
+            <!-- 💬 КОМЕНТАРІ -->
+
+            {% if show_preview_comments and post.comments %}
+                <div>
+                    <b>Latest comments:</b>
+                    <ul style="list-style: none; padding-left: 0; margin-top: 10px;">
+                        {% for comment in (post.comments|sort(attribute='timestamp', reverse=True))[:3] %}
+                            <li style="margin-bottom: 12px; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
+                                <a href="{{ url_for('main.user', username=comment.user.username) }}">
+                                    <b>{{ comment.user.username }}</b>
+                                </a>
+                                <small>
+                                    {{ moment(comment.timestamp).fromNow() }}
+                                </small>
+                                <br>
+                                {{ comment.body }}
+                                {% if current_user.id == comment.post.user_id %}
+                                    <form action="{{ url_for('main.delete_comment', comment_id=comment.id) }}"
+                                          method="post"
+                                          style="display:inline;">
+                                        <button type="submit" class="btn btn-sm btn-danger">
+                                            Delete
+                                        </button>
+                                    </form>
+                                    <form action="{{ url_for('main.ban_user',
+                                                             post_id=comment.post.id,
+                                                             user_id=comment.user.id) }}"
+                                          method="post"
+                                          style="display:inline;">
+                                        <button type="submit" class="btn btn-sm btn-warning">
+                                            Ban user
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+
+                    </ul>
+
+                    <a href="{{ url_for('main.post', post_id=post.id) }}">
+                        View all {{ post.comments_count() }} comments
+                    </a>
+                </div>
+            {% endif %}
+        </td>
+    </tr>
+</table>
+<script>
+function reactToPost(postId, action) {
+    fetch(`/post/${postId}/react`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: action })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success === false) {
+            alert(data.message);
+            return;
+        }
+        document.getElementById(`likes-${postId}`).innerText = data.likes;
+        document.getElementById(`dislikes-${postId}`).innerText = data.dislikes;
+    })
+    .catch(err => console.log(err));
+}
+</script>
