@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+    {% set show_preview_comments = False %}
+    {% include "_post.html" %}
+    <hr>
+    <h3>All comments ({{ comments|length }})</h3>
+    {% if comments %}
+        <ul class="list-group">
+            {% for comment in comments %}
+                <li class="list-group-item">
+                    <a href="{{ url_for('main.user',
+                                        username=comment.user.username) }}">
+                        <b>{{ comment.user.username }}</b>
+                    </a>
+                    <small class="text-muted">
+                        {{ moment(comment.timestamp).fromNow() }}
+                    </small>
+                    <br>
+                    {{ comment.body }}
+                    {% if current_user.id == comment.post.user_id %}
+                        <form action="{{ url_for('main.delete_comment', comment_id=comment.id) }}"
+                              method="post"
+                              style="display:inline;">
+                            <button type="submit" class="btn btn-sm btn-danger">
+                                Delete
+                            </button>
+                        </form>
+                        <form action="{{ url_for('main.ban_user',
+                                                 post_id=comment.post.id,
+                                                 user_id=comment.user.id) }}"
+                              method="post"
+                              style="display:inline;">
+                            <button type="submit" class="btn btn-sm btn-warning">
+                                Ban user
+                            </button>
+                        </form>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No comments yet.</p>
+    {% endif %}
+{% endblock %}

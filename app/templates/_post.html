@@ -34,21 +34,22 @@
                 </span>
             {% endif %}
             <br><br>
-            <!-- ЛАЙКИ / ДИЗЛАЙКИ -->
+            <!-- LIKES / DISLIKES -->
             <div>
-                <a href="{{ url_for('main.like_post', post_id=post.id) }}"
-                   style="text-decoration: none; margin-right: 10px;">
+                <button type="button"
+                        onclick="reactToPost({{ post.id }}, 'like')"
+                        style="border: none; background: none; cursor: pointer; margin-right: 10px;">
                     👍 Like
-                </a>
-                <span style="margin-right: 20px;">
+                </button>
+                <span id="likes-{{ post.id }}" style="margin-right: 20px;">
                     {{ post.likes_count() }}
                 </span>
-
-                <a href="{{ url_for('main.dislike_post', post_id=post.id) }}"
-                   style="text-decoration: none; margin-right: 10px;">
+                <button type="button"
+                        onclick="reactToPost({{ post.id }}, 'dislike')"
+                        style="border: none; background: none; cursor: pointer; margin-right: 10px;">
                     👎 Dislike
-                </a>
-                <span>
+                </button>
+                <span id="dislikes-{{ post.id }}">
                     {{ post.dislikes_count() }}
                 </span>
             </div>
@@ -56,34 +57,76 @@
             <!-- 💬 ФОРМА КОМЕНТАРЯ -->
             <form action="{{ url_for('main.post', post_id=post.id) }}" method="POST">
                 {{ form.hidden_tag() }}
-                {{ form.post(class="form-control", rows="2", placeholder="Write a comment...") }}
+                {{ form.body(class="form-control", rows="2", placeholder="Write a comment...") }}
                 <br>
                 {{ form.submit(class="btn btn-primary btn-sm") }}
             </form>
             <br>
             <!-- 💬 КОМЕНТАРІ -->
-            {% if post.comments %}
+
+            {% if show_preview_comments and post.comments %}
                 <div>
-                    <b>Comments:</b>
+                    <b>Latest comments:</b>
                     <ul style="list-style: none; padding-left: 0; margin-top: 10px;">
-                        {% for comment in post.comments|sort(attribute='timestamp') %}
+                        {% for comment in (post.comments|sort(attribute='timestamp', reverse=True))[:3] %}
                             <li style="margin-bottom: 12px; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                                <!-- автор коментаря -->
                                 <a href="{{ url_for('main.user', username=comment.user.username) }}">
                                     <b>{{ comment.user.username }}</b>
                                 </a>
-                                <!-- час -->
                                 <small>
                                     {{ moment(comment.timestamp).fromNow() }}
                                 </small>
                                 <br>
-                                <!-- текст -->
                                 {{ comment.body }}
+                                {% if current_user.id == comment.post.user_id %}
+                                    <form action="{{ url_for('main.delete_comment', comment_id=comment.id) }}"
+                                          method="post"
+                                          style="display:inline;">
+                                        <button type="submit" class="btn btn-sm btn-danger">
+                                            Delete
+                                        </button>
+                                    </form>
+                                    <form action="{{ url_for('main.ban_user',
+                                                             post_id=comment.post.id,
+                                                             user_id=comment.user.id) }}"
+                                          method="post"
+                                          style="display:inline;">
+                                        <button type="submit" class="btn btn-sm btn-warning">
+                                            Ban user
+                                        </button>
+                                    </form>
+                                {% endif %}
                             </li>
                         {% endfor %}
+
                     </ul>
+
+                    <a href="{{ url_for('main.post', post_id=post.id) }}">
+                        View all {{ post.comments_count() }} comments
+                    </a>
                 </div>
             {% endif %}
         </td>
     </tr>
 </table>
+<script>
+function reactToPost(postId, action) {
+    fetch(`/post/${postId}/react`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ action: action })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success === false) {
+            alert(data.message);
+            return;
+        }
+        document.getElementById(`likes-${postId}`).innerText = data.likes;
+        document.getElementById(`dislikes-${postId}`).innerText = data.dislikes;
+    })
+    .catch(err => console.log(err));
+}
+</script>

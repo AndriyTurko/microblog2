@@ -1,5 +1,6 @@
 import re
 import jwt
+import enum
 import sqlalchemy as sa
 import sqlalchemy.orm as so
 from time import time
@@ -67,6 +68,13 @@ followers = sa.Table(
               primary_key=True),
     sa.Column('followed_id', sa.Integer, sa.ForeignKey('user.id'),
               primary_key=True)
+)
+
+banned_users = sa.Table(
+    'banned_users',
+    db.metadata,
+    sa.Column('post_id', sa.Integer, sa.ForeignKey('post.id'), primary_key=True),
+    sa.Column('user_id', sa.Integer, sa.ForeignKey('user.id'), primary_key=True)
 )
 
 
@@ -182,6 +190,11 @@ class Post(SearchableMixin, db.Model):
     reactions: so.WriteOnlyMapped['PostReaction'] = so.relationship(
         back_populates='post'
     )
+    banned_users = db.relationship(
+        'User',
+        secondary='banned_users',
+        backref='banned_from_posts'
+    )
 
     def __repr__(self):
         return '<Post {}>'.format(self.body)
@@ -189,21 +202,29 @@ class Post(SearchableMixin, db.Model):
     def likes_count(self):
         query = sa.select(sa.func.count()).where(
             PostReaction.post_id == self.id,
-            PostReaction.reaction_type == 'like'
+            PostReaction.reaction_type == ReactionType.LIKE
         )
         return db.session.scalar(query)
 
     def dislikes_count(self):
         query = sa.select(sa.func.count()).where(
             PostReaction.post_id == self.id,
-            PostReaction.reaction_type == 'dislike'
+            PostReaction.reaction_type == ReactionType.DISLIKE
         )
         return db.session.scalar(query)
+
+    def comments_count(self):
+        return len(self.comments)
+
+
+class ReactionType(enum.Enum):
+    LIKE = "like"
+    DISLIKE = "dislike"
 
 
 class PostReaction(db.Model):
     id: so.Mapped[int] = so.mapped_column(primary_key=True)
-    reaction_type: so.Mapped[str] = so.mapped_column(sa.String(10))
+    reaction_type: so.Mapped[ReactionType] = so.mapped_column(sa.Enum(ReactionType))
     timestamp: so.Mapped[datetime] = so.mapped_column(default=lambda: datetime.now(timezone.utc))
     user_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id))
     post_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(Post.id))
@@ -230,3 +251,9 @@ class Comment(db.Model):
     def __repr__(self):
         return f'<Comment {self.body[:20]}>'
 
+
+class Reaction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
+    type = db.Column(db.String(10), nullable=False)

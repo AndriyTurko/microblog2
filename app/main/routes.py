@@ -1,12 +1,12 @@
 from datetime import datetime, timezone
-from flask import render_template, flash, redirect, url_for, request, g, current_app
+from flask import render_template, flash, redirect, url_for, request, g, current_app, jsonify, abort
 from flask_login import current_user, login_required
 from flask_babel import _, get_locale
 import sqlalchemy as sa
 from langdetect import detect, LangDetectException
 from app import db
 from app.main.forms import EditProfileForm, EmptyForm, PostForm, SearchForm, CommentForm
-from app.models import User, Post, PostReaction, Comment
+from app.models import User, Post, PostReaction, Comment, ReactionType, Reaction
 from app.translate import translate
 from app.main import bp
 
@@ -27,10 +27,10 @@ def index():
     form = PostForm()
     if form.validate_on_submit():
         try:
-            language = detect(form.post.data)
+            language = detect(form.body.data)
         except LangDetectException:
             language = ''
-        post = Post(body=form.post.data, author=current_user, language=language)
+        post = Post(body=form.body.data, author=current_user, language=language)
         db.session.add(post)
         db.session.commit()
         flash(_('Your post is now live!'))
@@ -66,8 +66,8 @@ def explore():
         posts=posts.items,
         next_url=next_url,
         prev_url=prev_url,
-       form=form,
-       comment_form=comment_form,
+        form=form,
+        comment_form=comment_form,
     )
 
 
@@ -151,7 +151,7 @@ def unfollow(username):
 
 
 @bp.route('/translate', methods=['POST'])
-@login_required
+# @login_required
 def translate_text():
     data = request.get_json()
     return {'text': translate(data['text'],
@@ -160,7 +160,7 @@ def translate_text():
 
 
 @bp.route('/search')
-@login_required
+# @login_required
 def search():
     if not g.search_form.validate():
         return redirect(url_for('main.explore'))
@@ -175,54 +175,40 @@ def search():
                            next_url=next_url, prev_url=prev_url)
 
 
-@bp.route('/like/<int:post_id>')
-@login_required
-def like_post(post_id):
-    post = db.get_or_404(Post, post_id)
-    existing_reaction = db.session.scalar(
-        sa.select(PostReaction).where(
-            PostReaction.user_id == current_user.id,
-            PostReaction.post_id == post.id
-        )
-    )
-    if existing_reaction:
-        if existing_reaction.reaction_type != 'like':
-            existing_reaction.reaction_type = 'like'
-            db.session.commit()
+@bp.route("/post/<int:post_id>/react", methods=["POST"])
+# @login_required
+def react_to_post(post_id):
+    if not current_user.is_authenticated:
+        return jsonify({
+            "success": False,
+            "message": "Щоб ставити реакції, потрібно увійти в акаунт."
+        })
+    data = request.get_json()
+    action = data.get("action")
+    post = Post.query.get_or_404(post_id)
+    reaction = Reaction.query.filter_by(
+        user_id=current_user.id,
+        post_id=post.id
+    ).first()
+    if reaction:
+        if reaction.type == action:
+            db.session.delete(reaction)
+        else:
+            reaction.type = action
     else:
-        reaction = PostReaction(
-            reaction_type='like',
+        reaction = Reaction(
             user_id=current_user.id,
-            post_id=post.id
-        )
-        db.session.add(reaction)
-        db.session.commit()
-    return redirect(request.referrer or url_for('main.index'))
-
-
-@bp.route('/dislike/<int:post_id>')
-@login_required
-def dislike_post(post_id):
-    post = db.get_or_404(Post, post_id)
-    existing_reaction = db.session.scalar(
-        sa.select(PostReaction).where(
-            PostReaction.user_id == current_user.id,
-            PostReaction.post_id == post.id
-        )
-    )
-    if existing_reaction:
-        if existing_reaction.reaction_type == 'dislike':
-            return redirect(request.referrer or url_for('main.index'))
-        existing_reaction.reaction_type = 'dislike'
-    else:
-        reaction = PostReaction(
-            reaction_type='dislike',
-            user_id=current_user.id,
-            post_id=post.id
+            post_id=post.id,
+            type=action
         )
         db.session.add(reaction)
     db.session.commit()
-    return redirect(request.referrer or url_for('main.index'))
+    likes_count = Reaction.query.filter_by(post_id=post.id, type="like").count()
+    dislikes_count = Reaction.query.filter_by(post_id=post.id, type="dislike").count()
+    return jsonify({
+        "likes": likes_count,
+        "dislikes": dislikes_count
+    })
 
 
 @bp.route('/post/<int:post_id>', methods=['GET', 'POST'])
@@ -230,6 +216,8 @@ def dislike_post(post_id):
 def post(post_id):
     post = db.get_or_404(Post, post_id)
     form = CommentForm()
+    if current_user in post.banned_users:
+        abort(403)
     if form.validate_on_submit():
         comment = Comment(
             body=form.body.data,
@@ -244,12 +232,81 @@ def post(post_id):
     comments = db.session.scalars(
         sa.select(Comment)
         .where(Comment.post_id == post.id)
-        .order_by(Comment.timestamp.asc())
+        .order_by(Comment.timestamp.desc())
     ).all()
+    # return render_template(
+    #     'post.html',
+    #     post=post,
+    #     form=form,
+    #     comments=comments
+    # )
     return render_template(
         'post.html',
+        title='Post',
         post=post,
         form=form,
         comments=comments
     )
+#
+#
+# @bp.route('/all-posts')
+# # @login_required
+# def all_posts():
+#     page = request.args.get('page', 1, type=int)
+#     query = sa.select(Post).order_by(Post.timestamp.desc())
+#     posts = db.paginate(
+#         query,
+#         page=page,
+#         per_page=10,
+#         error_out=False
+#     )
+#     next_url = url_for(
+#         'main.all_posts',
+#         page=posts.next_num
+#     ) if posts.has_next else None
+#     prev_url = url_for(
+#         'main.all_posts',
+#         page=posts.prev_num
+#     ) if posts.has_prev else None
+#     return render_template(
+#         'all_posts.html',
+#         title='All Posts',
+#         posts=posts.items,
+#         next_url=next_url,
+#         prev_url=prev_url
+#     )
 
+# @bp.route("/comment/<int:comment_id>/delete", methods=["POST"])
+# @login_required
+# def delete_comment(comment_id):
+#     comment = Comment.query.get_or_404(comment_id)
+#     post = Post.query.get_or_404(comment.post_id)
+#     if current_user.id != post.user_id:
+#         flash("Ви не можете видаляти цей коментар.")
+#         return redirect(url_for("main.post", post_id=post.id))
+#     db.session.delete(comment)
+#     db.session.commit()
+#     flash("Коментар видалено.")
+#     return redirect(url_for("main.post", post_id=post.id))
+
+@bp.route('/comment/<int:comment_id>/delete', methods=['POST'])
+def delete_comment(comment_id):
+    comment = Comment.query.get_or_404(comment_id)
+    post = comment.post
+    if post.user_id != current_user.id:
+        abort(403)
+    db.session.delete(comment)
+    db.session.commit()
+    return redirect(request.referrer or url_for('index'))
+
+
+@bp.route('/post/<int:post_id>/ban/<int:user_id>', methods=['POST'])
+def ban_user(post_id, user_id):
+    post = Post.query.get_or_404(post_id)
+    if post.user_id != current_user.id:
+        abort(403)
+    user = User.query.get_or_404(user_id)
+    if user not in post.banned_users:
+        post.banned_users.append(user)
+        db.session.commit()
+    return redirect(request.referrer or url_for('index'))
